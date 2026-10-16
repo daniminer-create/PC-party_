@@ -660,6 +660,32 @@ h3,
 
 }
 
+.speed-bonus-notice {
+
+    margin-top: 8px;
+    font-weight: 700;
+
+}
+
+.speed-bonus-notice.expired,
+.speed-bonus-expired {
+
+    color: var(--yellow);
+
+}
+
+.speed-bonus-awarded {
+
+    padding: 9px 11px;
+    margin-top: 10px;
+    color: var(--green);
+    font-weight: 800;
+    background: rgba(53,224,127,.1);
+    border: 1px solid rgba(53,224,127,.35);
+    border-radius: 8px;
+
+}
+
 .answer-timer-track {
 
     height: 9px;

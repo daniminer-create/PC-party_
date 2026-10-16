@@ -794,6 +794,8 @@ const game = {
     currentPlayer: 0,
     round: 1,
     maxRounds: 8,
+    questionCount: 0,
+    speedBonusEnabled: false,
     currentProblem: null,
     waiting: false,
     roundQuestions: [],
@@ -826,7 +828,6 @@ function showScreen(id) {
 function startGame(numberOfPlayers) {
     clearMinigameTasks();
     stopAnswerTimer();
-    stopAnswerTimer();
     const selectedRounds = Number($("roundCount").value);
     if (!Number.isInteger(selectedRounds) || selectedRounds < 4 || selectedRounds > 10) {
         alert("Escolha uma duração entre 4 e 10 rodadas.");
@@ -843,6 +844,8 @@ function startGame(numberOfPlayers) {
     game.currentPlayer = 0;
     game.round = 1;
     game.maxRounds = selectedRounds;
+    game.questionCount = 0;
+    game.speedBonusEnabled = false;
     game.roundQuestions = [];
     game.usedQuestions = new Set();
     game.eventsProcessedRound = 0;
@@ -893,6 +896,8 @@ function shuffle(array) {
 
 function loadRound() {
     stopAnswerTimer();
+    game.questionCount++;
+    game.speedBonusEnabled = game.questionCount > 3;
     game.waiting = false;
     game.miniFinished = false;
     game.diagnosisAnswered = false;
@@ -983,7 +988,14 @@ function adjustScore(player, amount, allowShield = true) {
 }
 
 function startAnswerTimer() {
+    const panel = $("answerBonusPanel");
+    if (!game.speedBonusEnabled) {
+        game.answerTimeRemaining = 0;
+        panel.classList.add("hidden");
+        return;
+    }
     game.answerTimeRemaining = game.answerTimeLimit;
+    panel.classList.remove("hidden");
     updateAnswerTimer();
     resumeAnswerTimer();
 }
@@ -1013,12 +1025,19 @@ function updateAnswerTimer() {
     const time = $("answerTime");
     const bonus = $("speedBonus");
     const fill = $("answerTimerFill");
-    if (!time || !bonus || !fill) return;
+    const status = $("speedBonusStatus");
+    if (!time || !bonus || !fill || !status) return;
     const availableBonus = Math.floor(100 * game.answerTimeRemaining / game.answerTimeLimit);
     time.textContent = game.answerTimeRemaining;
     bonus.textContent = availableBonus;
     fill.style.width = `${game.answerTimeRemaining / game.answerTimeLimit * 100}%`;
     fill.classList.toggle("timer-low", game.answerTimeRemaining <= 7);
+    const expired = game.answerTimeRemaining <= 0;
+    const statusText = expired
+        ? "⏱️ Bônus de rapidez expirado."
+        : "⚡ Bônus de rapidez ativo: responda corretamente antes do tempo acabar.";
+    if (status.textContent !== statusText) status.textContent = statusText;
+    status.classList.toggle("expired", expired);
 }
 
 function chooseDiagnosis(choice) {
@@ -1031,18 +1050,27 @@ function chooseDiagnosis(choice) {
         player.credits = Math.max(0, player.credits - 10);
         const penaltyText = penalty.amount ? "−50 pontos" : "seu Backup bloqueou a perda de pontos";
         const correctOption = game.currentProblem.options.find(option => option.id === game.currentProblem.answer);
-        $("message").innerHTML = `<div class="alert alert-danger score-loss">❌ Conduta inadequada. ${penaltyText} e −10 créditos. ${penalty.message}<hr><strong>Mais adequada:</strong> ${correctOption.text}<br>${game.currentProblem.explanation}</div>`;
+        const bonusMessage = game.speedBonusEnabled ? "O bônus de rapidez não foi conquistado." : "Sem bônus de rapidez nesta pergunta.";
+        $("message").innerHTML = `<div class="alert alert-danger score-loss">❌ Conduta inadequada. ${penaltyText} e −10 créditos. ${penalty.message}<br>${bonusMessage}<hr><strong>Mais adequada:</strong> ${correctOption.text}<br>${game.currentProblem.explanation}</div>`;
         renderScoreboard();
         endRound();
         return;
     }
     const basePoints = difficultySettings[game.currentProblem.difficulty].points;
-    const speedBonus = Math.floor(100 * game.answerTimeRemaining / game.answerTimeLimit);
+    const speedBonus = game.speedBonusEnabled
+        ? Math.floor(100 * game.answerTimeRemaining / game.answerTimeLimit)
+        : 0;
     const points = basePoints + speedBonus;
     player.score += points;
     $("diagnostic").classList.add("hidden");
     $("minigame").classList.remove("hidden");
-    $("message").innerHTML = `<div class="alert alert-success score-gain">✅ Conduta correta! +${basePoints} pontos da pergunta${speedBonus ? ` e +${speedBonus} de bônus por rapidez` : ""}. Total: <strong>+${points} pontos</strong>.<hr>${game.currentProblem.explanation}</div>`;
+    const speedBonusNotice = !game.speedBonusEnabled
+        ? ""
+        : speedBonus
+            ? `<div class="speed-bonus-awarded" role="status">⚡ Bônus de rapidez conquistado: +${speedBonus} pontos!</div>`
+            : `<div class="speed-bonus-expired" role="status">⏱️ Tempo esgotado: sem pontos extras de rapidez.</div>`;
+    const speedBonusSummary = speedBonus ? ` e +${speedBonus} de bônus por rapidez` : "";
+    $("message").innerHTML = `<div class="alert alert-success score-gain">✅ Conduta correta! +${basePoints} pontos da pergunta${speedBonusSummary}. Total: <strong>+${points} pontos</strong>.${speedBonusNotice}<hr>${game.currentProblem.explanation}</div>`;
     renderScoreboard();
     startMinigame(game.currentProblem.minigame);
 }
@@ -2455,6 +2483,7 @@ function setDevRound() {
     }
     clearMinigameTasks();
     game.round = requestedRound;
+    game.questionCount = (requestedRound - 1) * game.players.length + game.currentPlayer;
     game.roundQuestions = [];
     game.eventsProcessedRound = requestedRound - 1;
     game.waiting = false;
